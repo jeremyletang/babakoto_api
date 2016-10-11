@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	log "github.com/cihub/seelog"
@@ -20,6 +22,18 @@ import (
 
 var db *gorm.DB
 
+type MysqlConfig struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Ip       string `json:"ip"`
+	Port     string `json:"port"`
+	Database string `json:"database"`
+}
+
+type Config struct {
+	Mysql MysqlConfig `json:"mysql"`
+}
+
 func init() {
 	logger, err := log.LoggerFromConfigAsString(seelogConfig)
 	if err != nil {
@@ -28,10 +42,35 @@ func init() {
 	log.ReplaceLogger(logger)
 }
 
+// "root:root@tcp(192.168.99.100:3307)/babakoto?parseTime=True"
+func getConfig() Config {
+	c, err := ioutil.ReadFile(".babakoto.config.json")
+	if err != nil {
+		panic(fmt.Sprintf("[getConfig] unable to read config file: %s", err.Error()))
+	}
+
+	var config Config
+	if err := json.Unmarshal(c, &config); err != nil {
+		panic(fmt.Sprintf("[getConfig] invalid config format: %s", err.Error()))
+	}
+
+	return config
+}
+
 func main() {
+	// read config
+	config := getConfig()
 	// init db
 	var err error
-	if db, err = gorm.Open("mysql", "root:root@tcp(192.168.99.100:3307)/babakoto?parseTime=True"); err != nil {
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%s)/%s?parseTime=True",
+		config.Mysql.User,
+		config.Mysql.Password,
+		config.Mysql.Ip,
+		config.Mysql.Port,
+		config.Mysql.Database)
+
+	if db, err = gorm.Open("mysql", dsn); err != nil {
 		panic(fmt.Sprintf("[main] unable to initialize gorm: %s", err.Error()))
 	}
 	defer db.Close()
